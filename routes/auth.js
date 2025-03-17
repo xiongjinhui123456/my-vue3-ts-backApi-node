@@ -47,6 +47,8 @@ const db = require("../db"); //引入数据库连接
  *                 message:
  *                   type: string
  *                   example: 注册成功
+ *       400:
+ *         description: 用户已存在或邮箱已注册
  *       500:
  *         description: 注册失败
  */
@@ -54,8 +56,22 @@ const db = require("../db"); //引入数据库连接
 //用户注册
 router.post("/register", async (req, res) => {
   const { username, password, email } = req.body;
+  if (!username || !password || !email) {
+    return res.status(400).json({ error: "用户名、密码和邮箱不能为空" });
+  }
   try {
     const connection = await db.getConnection();
+    // 1. 检查用户名是否已注册
+    const [existingUsers] = await connection.query(
+      "SELECT * FROM users WHERE username = ?",
+      [username]
+    );
+
+    if (existingUsers.length > 0) {
+      connection.release();
+      return res.status(400).json({ error: "用户名已被注册" });
+    }
+    // 2. 插入新用户
     await connection.query(
       "INSERT INTO users (username,password,email) VALUES(?,?,?)",
       [username, password, email]
@@ -63,7 +79,7 @@ router.post("/register", async (req, res) => {
     connection.release();
     res.json({ message: "注册成功" });
   } catch (err) {
-    res.status(500).json({ message: "注册失败" });
+    res.status(500).json({ message: "服务器错误" });
   }
 });
 
@@ -128,7 +144,7 @@ router.post("/login", async (req, res) => {
         process.env.JWT_SECRET, //密钥,为了保证 Token 安全性，添加 环境变量，在 .env 文件里：
         { expiresIn: "2h" } //过期时间
       );
-      res.json({ message: "登录成功", token,user});
+      res.json({ message: "登录成功", token, user });
     } else {
       res.status(401).json({ error: "用户名或密码错误" });
     }
